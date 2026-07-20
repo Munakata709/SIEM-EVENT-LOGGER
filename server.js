@@ -1,42 +1,8 @@
 const express = require('express');
-const crypto = require('crypto');
+const pool = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-//Hard coded logs
-let logs = [
-  {
-    id: crypto.randomUUID(),
-    timestamp: '2026-07-10T14:22:31.000Z',
-    source_ip: '203.0.113.45',
-    destination_ip: '10.0.1.12',
-    event_type: 'brute_force',
-    severity: 'high',
-    status: 'open',
-    description: '12 failed SSH login attempts within 60 seconds'
-  },
-  {
-    id: crypto.randomUUID(),
-    timestamp: '2026-07-10T15:03:07.000Z',
-    source_ip: '198.51.100.9',
-    destination_ip: '10.0.1.4',
-    event_type: 'port_scan',
-    severity: 'medium',
-    status: 'investigating',
-    description: 'Sequential TCP SYN scan across ports 1-1024'
-  },
-  {
-    id: crypto.randomUUID(),
-    timestamp: '2026-07-10T16:47:52.000Z',
-    source_ip: '192.0.2.77',
-    destination_ip: '10.0.1.30',
-    event_type: 'malware_detected',
-    severity: 'critical',
-    status: 'resolved',
-    description: 'Trojan signature match on uploaded file, quarantined'
-  }
-];
 
 app.use(express.json());
 
@@ -46,18 +12,28 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/api/resources', (req, res) => {
-  res.status(200).json(logs);
-});
-
-app.get('/api/resources/:id', (req, res) => {
-  const log = logs.find(l => l.id === req.params.id);
-  if (!log) {
-    return res.status(404).json({ error: `No resource found with id ${req.params.id}` });
+app.get('/api/items', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM items ORDER BY timestamp');
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
   }
-  res.status(200).json(log);
 });
 
+app.get('/api/items/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM items WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: `No item found with id ${req.params.id}` });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
 app.post('/api/resources', (req, res) => {
   const { source_ip, destination_ip, event_type, severity, status, description } = req.body;
 
